@@ -52,6 +52,7 @@ android {
 dependencies {
     val navVersion = "2.6.0"
     implementation("androidx.navigation:navigation-compose:$navVersion")
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("com.squareup.retrofit2:retrofit:2.4.0")
     implementation("com.squareup.retrofit2:converter-gson:2.4.0")
     implementation("androidx.core:core-ktx:1.9.0")

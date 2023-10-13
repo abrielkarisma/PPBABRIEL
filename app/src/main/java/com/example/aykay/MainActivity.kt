@@ -1,5 +1,6 @@
 package com.example.aykay
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -84,7 +86,8 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Login(navController: NavController) {
+fun Login(navController: NavController, context: Context = LocalContext.current) {
+    val preferencesManager = remember { PreferencesManager(context = context) }
     val expanded = remember { mutableStateOf(false) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -92,18 +95,19 @@ fun Login(navController: NavController) {
     val Prim = Color(0xFF2D2424)
     val Sec = Color(0xFF5C3D2E)
     var jwt by remember { mutableStateOf("") }
-    var baseUrl = "http://10.217.25.131:1337/api/"
+    var baseUrl = "http://10.0.2.2:1337/api/"
     val retrofit = Retrofit.Builder()
         .baseUrl(baseUrl)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
         .create(LoginService::class.java)
+    jwt = preferencesManager.getData("jwt")
     val call = retrofit.getData(LoginData("abrielkarisma", "Abil2505?"))
     call.enqueue(object : Callback<LoginRespon> {
         override fun onResponse(call: Call<LoginRespon>, response: Response<LoginRespon>) {
             if (response.code() == 200) {
-                jwt = response.body()?.jwt!!
-//                print(jwt)
+//                jwt = response.body()?.jwt!!
+//                preferencesManager.saveData("jwt", jwt)
             }
         }
 
@@ -113,7 +117,6 @@ fun Login(navController: NavController) {
         }
 
     })
-//    val navController = rememberNavController()
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -199,7 +202,7 @@ fun Login(navController: NavController) {
                     textAlign = TextAlign.Right,
                 )
             }
-//            Text(text = jwt)
+            Text(text = jwt)
         }
     }
 
