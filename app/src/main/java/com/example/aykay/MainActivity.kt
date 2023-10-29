@@ -1,25 +1,36 @@
 package com.example.aykay
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.Card
 import androidx.compose.material3.Divider
+import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,6 +42,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +58,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -53,7 +66,15 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.android_app_jetpack_compose.response.UserRespon
+import com.example.android_app_jetpack_compose.service.UserService
 import com.example.compose.AppTheme
+import com.example.helloandroid.PreferencesManager
+import com.example.helloandroid.data.LoginData
+import com.example.helloandroid.data.RegisterData
+import com.example.helloandroid.respon.LoginRespon
+import com.example.helloandroid.service.LoginService
+import com.example.helloandroid.service.RegisterService
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -67,13 +88,23 @@ class MainActivity : ComponentActivity() {
             AppTheme {
 
 
+                val sharedPreferences: SharedPreferences =
+                    LocalContext.current.getSharedPreferences("auth", Context.MODE_PRIVATE)
                 val navController = rememberNavController()
+
+                var startDestination: String
+                var jwt = sharedPreferences.getString("jwt", "")
+                if (jwt.equals("")) {
+                    startDestination = "login"
+                } else {
+                    startDestination = "homepage"
+                }
                 NavHost(navController = navController, startDestination = "login") {
                     composable("login") {
                         Login(navController)
                     }
                     composable("homepage") {
-                        HomePage(navController)
+                        Homepage(navController)
                     }
                     composable("register") {
                         Register(navController)
@@ -88,35 +119,15 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Login(navController: NavController, context: Context = LocalContext.current) {
     val preferencesManager = remember { PreferencesManager(context = context) }
-    val expanded = remember { mutableStateOf(false) }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isLoginEnabled by remember { mutableStateOf(false) }
+    var username by remember { mutableStateOf(TextFieldValue("")) }
+    var password by remember { mutableStateOf(TextFieldValue("")) }
+    var baseUrl = "http://10.0.2.2:1337/api/"
+    var jwt by remember { mutableStateOf("") }
     val Prim = Color(0xFF2D2424)
     val Sec = Color(0xFF5C3D2E)
-    var jwt by remember { mutableStateOf("") }
-    var baseUrl = "http://10.0.2.2:1337/api/"
-    val retrofit = Retrofit.Builder()
-        .baseUrl(baseUrl)
-        .addConverterFactory(GsonConverterFactory.create())
-        .build()
-        .create(LoginService::class.java)
+
     jwt = preferencesManager.getData("jwt")
-    val call = retrofit.getData(LoginData("abrielkarisma", "Abil2505?"))
-    call.enqueue(object : Callback<LoginRespon> {
-        override fun onResponse(call: Call<LoginRespon>, response: Response<LoginRespon>) {
-            if (response.code() == 200) {
-//                jwt = response.body()?.jwt!!
-//                preferencesManager.saveData("jwt", jwt)
-            }
-        }
 
-
-        override fun onFailure(call: Call<LoginRespon>, t: Throwable) {
-            print(t.message)
-        }
-
-    })
     Surface(
         modifier = Modifier
             .fillMaxSize()
@@ -168,17 +179,15 @@ fun Login(navController: NavController, context: Context = LocalContext.current)
             )
             OutlinedTextField(
                 value = username,
-                onValueChange = { newUsername: String ->
-                    username = newUsername
-                    isLoginEnabled = newUsername.isNotEmpty() && password.isNotEmpty()
+                onValueChange = { newText ->
+                    username = newText
                 },
                 label = { Text("Username") }
             )
             OutlinedTextField(
                 value = password,
-                onValueChange = { newPass: String ->
-                    password = newPass
-                    isLoginEnabled = username.isNotEmpty() && newPass.isNotEmpty()
+                onValueChange = { newText ->
+                    password = newText
                 },
                 label = { Text("Password") },
                 visualTransformation = PasswordVisualTransformation(),
@@ -186,7 +195,41 @@ fun Login(navController: NavController, context: Context = LocalContext.current)
             )
 
             OutlinedButton(
-                onClick = { navController.navigate("homepage");expanded.value = !expanded.value },
+                onClick = {
+                    val retrofit = Retrofit.Builder()
+                        .baseUrl(baseUrl)
+                        .addConverterFactory(GsonConverterFactory.create())
+                        .build()
+                        .create(LoginService::class.java)
+                    val call = retrofit.getData(LoginData(username.text, password.text))
+                    call.enqueue(object : Callback<LoginRespon> {
+                        override fun onResponse(
+                            call: Call<LoginRespon>,
+                            response: Response<LoginRespon>
+                        ) {
+                            print(response.code())
+                            if (response.code() == 200) {
+                                jwt = response.body()?.jwt!!
+                                preferencesManager.saveData("jwt", jwt)
+                                navController.navigate("homepage")
+                            } else if (response.code() == 400) {
+                                print("error login")
+                                var toast = Toast.makeText(
+                                    context,
+                                    "Username atau password salah",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+
+                            }
+                        }
+
+                        override fun onFailure(call: Call<LoginRespon>, t: Throwable) {
+                            print(t.message)
+                        }
+
+                    })
+                },
+
                 border = BorderStroke(2.dp, Sec)
             ) {
                 Text(text = "Login", color = Sec)
@@ -194,7 +237,7 @@ fun Login(navController: NavController, context: Context = LocalContext.current)
             Divider(modifier = Modifier.padding(16.dp))
 
             TextButton(
-                onClick = { navController.navigate("Register");expanded.value = !expanded.value }
+                onClick = { navController.navigate("Register") }
             ) {
                 Text(
                     text = "Don't have an account yet? Register",
@@ -212,12 +255,11 @@ fun Login(navController: NavController, context: Context = LocalContext.current)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 
-fun Register(navController: NavController) {
-    val expanded = remember { mutableStateOf(false) }
-    var username by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var isLoginEnabled by remember { mutableStateOf(false) }
+fun Register(navController: NavController, context: Context = LocalContext.current) {
+    val preferencesManager = remember { PreferencesManager(context = context) }
+    var username by remember { mutableStateOf(TextFieldValue("")) }
+    var password by remember { mutableStateOf(TextFieldValue("")) }
+    var email by remember { mutableStateOf(TextFieldValue("")) }
     val Prim = Color(0xFF2D2424)
     val Sec = Color(0xFF5C3D2E)
 
@@ -271,49 +313,69 @@ fun Register(navController: NavController) {
                 modifier = Modifier.padding(16.dp)
             )
             OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") }
+                value = email, onValueChange = { newText ->
+                    email = newText
+                }, label = { Text("Email") }
             )
-            OutlinedTextField(
-                value = username,
-                onValueChange = { newUsername: String ->
-                    username = newUsername
-                    isLoginEnabled = newUsername.isNotEmpty() && password.isNotEmpty()
-                },
-                label = { Text("Username") }
-            )
+            OutlinedTextField(value = username, onValueChange = { newText ->
+                username = newText
+            }, label = { Text("Username") })
+
             OutlinedTextField(
                 value = password,
-                onValueChange = { newPass: String ->
-                    password = newPass
-                    isLoginEnabled = username.isNotEmpty() && newPass.isNotEmpty()
+                onValueChange = { newText ->
+                    password = newText
                 },
                 label = { Text("Password") },
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             )
-            OutlinedTextField(
-                value = password,
-                onValueChange = { newPass: String ->
-                    password = newPass
-                    isLoginEnabled = username.isNotEmpty() && newPass.isNotEmpty()
-                },
-                label = { Text("Confirm Password") },
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            )
-
             OutlinedButton(
-                onClick = { navController.navigate("homepage");expanded.value = !expanded.value },
-                border = BorderStroke(2.dp, Sec)
-            ) {
+                onClick = {
+                    var baseUrl = "http://10.0.2.2:1337/api/"
+                    val retrofit = Retrofit.Builder()
+                        .baseUrl(baseUrl)
+                        .addConverterFactory(GsonConverterFactory.create())
+                        .build()
+                        .create(RegisterService::class.java)
+                    val call =
+                        retrofit.saveData(RegisterData(email.text, username.text, password.text))
+                    call.enqueue(object : Callback<LoginRespon> {
+                        override fun onResponse(
+                            call: Call<LoginRespon>,
+                            response: Response<LoginRespon>
+                        ) {
+                            print(response.code())
+                            if (response.code() == 200) {
+
+                            } else if (response.code() == 400) {
+                                print("error login")
+                                var toast = Toast.makeText(
+                                    context,
+                                    "Username atau password salah",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+
+                        override fun onFailure(call: Call<LoginRespon>, t: Throwable) {
+                            print(t.message)
+                        }
+
+                    })
+                }) {
                 Text(text = "Register", color = Sec)
+            }
+            OutlinedButton(onClick = {
+                preferencesManager.saveData("jwt", "")
+                navController.navigate("greeting")
+            }) {
+                Text("Logout")
             }
             Divider(modifier = Modifier.padding(16.dp))
 
             TextButton(
-                onClick = { navController.navigate("Login");expanded.value = !expanded.value }
+                onClick = { navController.navigate("Login") }
             ) {
                 Text(
                     text = "Already have an account? Login ",
@@ -328,43 +390,133 @@ fun Register(navController: NavController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomePage(navController: NavController) {
+fun Homepage(navController: NavController, context: Context = LocalContext.current) {
+    val listUser = remember { mutableStateListOf<UserRespon>() }
+
+    val baseUrl = "http://10.0.2.2:1337/api/"
+    val retrofit =
+        Retrofit.Builder().baseUrl(baseUrl).addConverterFactory(GsonConverterFactory.create())
+            .build().create(UserService::class.java)
+    val call = retrofit.getData()
+    call.enqueue(object : Callback<List<UserRespon>> {
+        override fun onResponse(
+            call: Call<List<UserRespon>>, response: Response<List<UserRespon>>
+        ) {
+            if (response.code() == 200) {
+                listUser.clear()
+                response.body()?.forEach { userResponse ->
+                    listUser.add(userResponse)
+                }
+            } else if (response.code() == 400) {
+                print("error login")
+                var toast = Toast.makeText(
+                    context, "Username atau password salah", Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+
+        override fun onFailure(call: Call<List<UserRespon>>, t: Throwable) {
+            print(t.message)
+        }
+
+    })
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(text = "Login") },
-                colors = TopAppBarDefaults.smallTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.primary,
-                )
-            )
-        },
         floatingActionButton = {
-            FloatingActionButton(onClick = { }, shape = CircleShape) {
+            FloatingActionButton(onClick = {
+                navController.navigate("createuser")
+            }) {
                 Icon(Icons.Default.Add, contentDescription = "Add")
             }
         },
-        bottomBar = {
-            BottomAppBar {
-
-                Text(
-                    text = "Hoho..",
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp)
-                )
-            }
-        }
+        topBar = {
+            TopAppBar(
+                title = { Text(text = "List User") },
+                colors = TopAppBarDefaults.smallTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
     ) { innerPadding ->
-        Surface(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White)
-                .padding(innerPadding)
+                .padding(innerPadding),
         ) {
+            LazyColumn {
+                listUser.forEach { user ->
+                    item {
+                        Card(modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                            .background(MaterialTheme.colorScheme.surface)
+                            .clickable { /* Handle item click if needed */ }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.primary),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .padding(16.dp)
+                                        .weight(1f)
+                                ) {
+                                    Text(
+                                        text = user.username,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = user.email,
+                                        color = Color.White
+                                    )
+                                }
+                                IconButton(modifier = Modifier.size(48.dp), onClick = {
+                                    val retrofit = Retrofit.Builder().baseUrl(baseUrl)
+                                        .addConverterFactory(GsonConverterFactory.create()).build()
+                                        .create(UserService::class.java)
+                                    val call = retrofit.delete(user.id)
+                                    call.enqueue(object : Callback<UserRespon> {
+                                        override fun onResponse(
+                                            call: Call<UserRespon>,
+                                            response: Response<UserRespon>
+                                        ) {
+                                            print(response.code())
+                                            if (response.code() == 200) {
+                                                listUser.remove(user)
+                                            } else if (response.code() == 400) {
+                                                print("error login")
+                                                var toast = Toast.makeText(
+                                                    context,
+                                                    "Username atau password salah",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+
+                                            }
+                                        }
+
+                                        override fun onFailure(
+                                            call: Call<UserRespon>, t: Throwable
+                                        ) {
+                                            print(t.message)
+                                        }
+
+                                    })
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Delete",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
-
-
