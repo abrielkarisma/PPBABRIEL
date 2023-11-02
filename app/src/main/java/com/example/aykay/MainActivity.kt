@@ -1,5 +1,3 @@
-@file:Suppress("UNUSED_VALUE")
-
 package com.example.aykay
 
 import android.content.Context
@@ -62,21 +60,21 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.android_app_jetpack_compose.response.UserRespon
-import com.example.android_app_jetpack_compose.service.UserService
 import com.example.compose.AppTheme
 import com.example.helloandroid.PreferencesManager
 import com.example.helloandroid.data.LoginData
 import com.example.helloandroid.data.RegisterData
+import com.example.helloandroid.data.UpdateData
 import com.example.helloandroid.respon.LoginRespon
 import com.example.helloandroid.service.LoginService
 import com.example.helloandroid.service.RegisterService
+import com.example.helloandroid.service.UserService
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-@Suppress("ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,6 +101,16 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("register") {
                         Register(navController)
+                    }
+                    composable(
+                        route = "EditUser/{userid}/{username}",
+                    ) { backStackEntry ->
+
+                        EditUser(
+                            navController,
+                            backStackEntry.arguments?.getString("userid"),
+                            backStackEntry.arguments?.getString("username")
+                        )
                     }
                 }
             }
@@ -500,6 +508,11 @@ fun Homepage(navController: NavController, context: Context = LocalContext.curre
                                 }) {
                                     Text("Delete")
                                 }
+                                ElevatedButton(onClick = {
+                                    navController.navigate("EditUser/" + user.id + "/" + user.username)
+                                }) {
+                                    Text("Edit")
+                                }
                             }
                         }
                     }
@@ -511,6 +524,83 @@ fun Homepage(navController: NavController, context: Context = LocalContext.curre
                     Text("Logout")
                 }
 
+            }
+
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditUser(
+    navController: NavController,
+    userid: String?,
+    usernameParameter: String?,
+    context: Context = LocalContext.current
+) {
+    val preferencesManager = remember { PreferencesManager(context = context) }
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf(TextFieldValue("")) }
+    var email by remember { mutableStateOf(TextFieldValue("")) }
+    if (usernameParameter != null) {
+        username = usernameParameter
+    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(text = "Edit User") },
+                colors = TopAppBarDefaults.smallTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.primary,
+                ),
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (userid != null) {
+                Text(userid)
+            }
+            OutlinedTextField(value = username, onValueChange = { newText ->
+                username = newText
+            }, label = { Text("Username") })
+            ElevatedButton(onClick = {
+                var baseUrl = "http://10.0.2.2:1337/api/"
+                val retrofit = Retrofit.Builder()
+                    .baseUrl(baseUrl)
+                    .addConverterFactory(GsonConverterFactory.create())
+                    .build()
+                    .create(UserService::class.java)
+                val call = retrofit.save(userid, UpdateData(username))
+                call.enqueue(object : Callback<LoginRespon> {
+                    override fun onResponse(
+                        call: Call<LoginRespon>,
+                        response: Response<LoginRespon>
+                    ) {
+                        print(response.code())
+                        if (response.code() == 200) {
+                            navController.navigate("Homepage")
+                        } else if (response.code() == 400) {
+                            print("error login")
+                            var toast = Toast.makeText(
+                                context,
+                                "Username atau password salah",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+
+                    override fun onFailure(call: Call<LoginRespon>, t: Throwable) {
+                        print(t.message)
+                    }
+
+                })
+            }) {
+                Text("Simpan")
             }
         }
     }
